@@ -300,16 +300,15 @@
 </div>
 <p>当进程调用 <code class="docutils literal notranslate"><span class="pre">thread_create</span></code> 系统调用后，内核会在这个进程内部创建一个新的线程，这个线程能够访问到进程所拥有的代码段，
 堆和其他数据段。但内核会给这个新线程分配一个它专有的用户态栈，这样每个线程才能相对独立地被调度和执行。
-另外，由于用户态进程与内核之间有各自独立的页表，所以二者需要有一个跳板页 <code class="docutils literal notranslate"><span class="pre">TRAMPOLINE</span></code>
-来处理用户态切换到内核态的地址空间平滑转换的事务。所以当出现线程后，在进程中的每个线程也需要有一个独立的跳板页
-<code class="docutils literal notranslate"><span class="pre">TRAMPOLINE</span></code> 来完成同样的事务。</p>
+另外，由于用户态进程与内核之间有各自独立的页表，所以二者需要跳板页
+来处理用户态切换到内核态的地址空间转换。其中，地址空间最高处的代码页  <code class="docutils literal notranslate"><span class="pre">TRAMPOLINE</span></code> 由属于整个进程（已在第五章介绍）。但出现线程后，在进程中的每个线程需要一个独立的数据页来存储异常陷入时的上下文信息。在 <code class="docutils literal notranslate"><span class="pre">sys_thread_create</span></code> 中会为新线程生成 <code class="docutils literal notranslate"><span class="pre">TaskUserRes</span></code>，其中通过 <code class="docutils literal notranslate"><span class="pre">trap_cx_bottom_from_tid</span></code> 指定该线程所属的数据页。后续讲解  <code class="docutils literal notranslate"><span class="pre">sys_thread_create</span></code> 时会详细介绍这一点。</p>
 <p>相比于创建进程的 <code class="docutils literal notranslate"><span class="pre">fork</span></code> 系统调用，创建线程不需要要建立新的地址空间，这是二者之间最大的不同。
 另外属于同一进程中的线程之间没有父子关系，这一点也与进程不一样。</p>
 </div>
 <div class="section" id="id5">
 <h3>等待子线程系统调用<a class="headerlink" href="#id5" title="永久链接至标题">¶</a></h3>
 <p>当一个线程执行完代表它的功能后，会通过 <code class="docutils literal notranslate"><span class="pre">exit</span></code> 系统调用退出。内核在收到线程发出的 <code class="docutils literal notranslate"><span class="pre">exit</span></code> 系统调用后，
-会回收线程占用的部分资源，即用户态用到的资源，比如用户态的栈，用于系统调用和异常处理的跳板页等。
+会回收线程占用的部分资源，即用户态用到的资源，比如用户态的栈，用于系统调用和异常处理的 <code class="docutils literal notranslate"><span class="pre">TrapContext</span></code> 跳板页等。
 而该线程的内核态用到的资源，比如内核栈等，需要通过进程/主线程调用 <code class="docutils literal notranslate"><span class="pre">waittid</span></code> 来回收了，
 这样整个线程才能被彻底销毁。系统调用 <code class="docutils literal notranslate"><span class="pre">waittid</span></code> 的原型如下：</p>
 <div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span><span class="sd">/// 参数：tid表示线程id</span>
@@ -482,7 +481,7 @@
 <p>线程管理的结构是线程管理器，即任务管理器，位于 <code class="docutils literal notranslate"><span class="pre">os/src/task/manager.rs</span></code> 中，
 其数据结构和方法与之前章节中进程的任务管理器完全一样，仅负责管理所有线程。而处理器管理结构 <code class="docutils literal notranslate"><span class="pre">Processor</span></code>
 负责维护 CPU 状态、调度和特权级切换等事务。其数据结构与之前章节中进程的处理器管理结构完全一样。
-但在相关方法上面，由于多个线程有各自的用户栈和跳板页，所以有些不同，下面会进一步分析。</p>
+但在相关方法上面，由于多个线程有各自的用户栈和用于存放 <code class="docutils literal notranslate"><span class="pre">TrapContext</span></code> 的跳板页，所以有些不同，下面会进一步分析。</p>
 </div>
 </div>
 <div class="section" id="id13">
@@ -503,7 +502,7 @@
 <ul class="simple">
 <li><p>线程的用户态栈：确保在用户态的线程能正常执行函数调用；</p></li>
 <li><p>线程的内核态栈：确保线程陷入内核后能正常执行函数调用；</p></li>
-<li><p>线程的跳板页：确保线程能正确的进行用户态&lt;–&gt;内核态切换；</p></li>
+<li><p>线程的跳板页：存放 <code class="docutils literal notranslate"><span class="pre">TrapContext</span></code> ，确保线程能正确的进行用户态&lt;–&gt;内核态切换；</p></li>
 <li><p>线程上下文：即线程用到的寄存器信息，用于线程切换。</p></li>
 </ul>
 <p>线程创建的具体实现如下：</p>
@@ -547,7 +546,7 @@
 <ul class="simple">
 <li><p>第4-5行，找到当前正在执行的线程 <code class="docutils literal notranslate"><span class="pre">task</span></code> 和此线程所属的进程 <code class="docutils literal notranslate"><span class="pre">process</span></code> 。</p></li>
 <li><p>第7-11行，调用 <code class="docutils literal notranslate"><span class="pre">TaskControlBlock::new</span></code> 方法，创建一个新的线程 <code class="docutils literal notranslate"><span class="pre">new_task</span></code> ，在创建过程中，建立与进程
-<code class="docutils literal notranslate"><span class="pre">process</span></code> 的所属关系，分配了线程用户态栈、内核态栈、用于异常/中断的跳板页。</p></li>
+<code class="docutils literal notranslate"><span class="pre">process</span></code> 的所属关系，分配了线程用户态栈、内核态栈、用于异常/中断时存放 <code class="docutils literal notranslate"><span class="pre">TrapContext</span></code> 的页面。</p></li>
 <li><p>第13行，把线程挂到调度队列中。</p></li>
 <li><p>第19-22行，把线程接入到所需进程的线程列表 <code class="docutils literal notranslate"><span class="pre">tasks</span></code> 中。</p></li>
 <li><p>第25~32行，初始化位于该线程在用户态地址空间中的 Trap 上下文：设置线程的函数入口点和用户栈，
