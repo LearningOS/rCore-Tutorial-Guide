@@ -291,7 +291,11 @@ mutex 系统调用的实现
             };
             id as isize
         } else {
-            process_inner.mutex_list.push(Some(Arc::new(MutexSpin::new())));
+            process_inner.mutex_list.push(if !blocking {
+                Some(Arc::new(MutexSpin::new()))
+            } else {
+                Some(Arc::new(MutexBlocking::new()))
+            });
             process_inner.mutex_list.len() as isize - 1
         }
     }
@@ -375,5 +379,3 @@ mutex 系统调用的实现
 - 第 8 行，调用 ID 为 ``mutex_id`` 的互斥锁 ``mutex`` 的 ``unlock`` 方法，具体工作由该方法来完成的。
 - 第 17-18 行，如果有等待的线程，唤醒等待最久的那个线程，相当于将锁的所有权移交给该线程。
 - 第 20 行，若没有线程等待，则释放锁。
-
-

@@ -134,7 +134,7 @@
     Shell: Process 2 exited with code 0
     >>
 
-我们可以看到5个代表“哲学家”的线程通过操作系统的 **信号量** 互斥机制在进行 “THINKING”、“EATING”、“WAITING” 的日常生活。
+我们可以看到5个代表“哲学家”的线程通过操作系统的 **互斥锁** 机制在进行 “THINKING”、“EATING”、“WAITING” 的日常生活。
 没有哲学家由于拿不到筷子而饥饿，也没有两个哲学家同时拿到一个筷子。
 
 .. note::
@@ -221,12 +221,10 @@
     │       ├── task
     │       │   ├── context.rs (修改：将任务上下文的成员变量改为 pub 类型)
     │       │   ├── id.rs (新增：由 pid.rs 修改而来，提供 pid/tid 、 kstack/ustack 的分配和回收机制)
-    │       │   ├── kthread.rs (新增：完全在内核态运行的线程，仅供参考，在实验中未使用)
     │       │   ├── manager.rs
     │       │   ├── mod.rs (修改：增加阻塞线程的功能，将 exit 扩展到多线程，并在主线程退出时一并退出进程)
     │       │   ├── processor.rs (修改：增加获取当前线程的中断上下文虚拟地址及获取当前进程的功能)
     │       │   ├── process.rs (新增：将原先 Task 中的地址空间、文件等机制拆分为进程)
-    │       │   ├── stackless_coroutine.rs (新增：完全在内核态运行的无栈协程，仅供参考，在实验中未使用)
     │       │   ├── switch.rs
     │       │   ├── switch.S
     │       │   └── task.rs (修改：将进程相关的功能移至 process.rs 中)
