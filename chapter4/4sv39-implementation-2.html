@@ -271,11 +271,11 @@
 内核数据的终止物理地址，在它之后的物理内存都是可用的。而在 <code class="docutils literal notranslate"><span class="pre">config</span></code> 子模块中：</p>
 <div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="c1">// os/src/config.rs</span>
 
-<span class="k">pub</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">MEMORY_END</span>: <span class="kt">usize</span> <span class="o">=</span><span class="w"> </span><span class="mh">0x80800000</span><span class="p">;</span><span class="w"></span>
+<span class="k">pub</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">MEMORY_END</span>: <span class="kt">usize</span> <span class="o">=</span><span class="w"> </span><span class="mh">0x88000000</span><span class="p">;</span><span class="w"></span>
 </pre></div>
 </div>
-<p>我们硬编码整块物理内存的终止物理地址为 <code class="docutils literal notranslate"><span class="pre">0x80800000</span></code> 。 而物理内存的起始物理地址为 <code class="docutils literal notranslate"><span class="pre">0x80000000</span></code> ，
-意味着我们将可用内存大小设置为 <span class="math notranslate nohighlight">\(8\text{MiB}\)</span> ，当然也可以设置的更大一点。</p>
+<p>我们硬编码整块物理内存的终止物理地址为 <code class="docutils literal notranslate"><span class="pre">0x88000000</span></code> 。 而物理内存的起始物理地址为 <code class="docutils literal notranslate"><span class="pre">0x80000000</span></code> ，
+意味着我们将可用内存大小设置为 <span class="math notranslate nohighlight">\(128\text{MiB}\)</span> ，当然也可以设置的更大一点。</p>
 <p>用一个左闭右开的物理页号区间来表示可用的物理内存，则：</p>
 <ul class="simple">
 <li><p>区间的左端点应该是 <code class="docutils literal notranslate"><span class="pre">ekernel</span></code> 的物理地址以上取整方式转化成的物理页号；</p></li>
