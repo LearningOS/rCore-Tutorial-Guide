@@ -16,6 +16,7 @@
    $ git clone https://github.com/LearningOS/rCore-Tutorial-Code.git
    $ cd rCore-Tutorial-Code
    $ git checkout ch6
+   $ git clone https://github.com/LearningOS/rCore-Tutorial-Test.git user
 
 在 qemu 模拟器上运行本章代码：
 
@@ -95,7 +96,7 @@
                ├── context.rs
                ├── manager.rs
                ├── mod.rs(修改：初始进程 INITPROC 的初始化)
-               ├── pid.rs
+               ├── id.rs
                ├── processor.rs
                ├── switch.rs
                ├── switch.S
