@@ -105,68 +105,69 @@
 
 .. code-block:: rust
 
-    // os/src/task/pid.rs
+    // os/src/task/id.rs
 
     pub struct PidHandle(pub usize);
 
-类似之前的物理页帧分配器 ``FrameAllocator`` ，我们实现一个同样使用简单栈式分配策略的进程标识符分配器
-``PidAllocator`` ，并将其全局实例化为 ``PID_ALLOCATOR`` ：
+类似之前的物理页帧分配器 ``FrameAllocator`` ，我们实现一个同样使用简单栈式分配策略的可回收分配器
+``RecycleAllocator`` ，并将其全局实例化为 ``PID_ALLOCATOR`` ：
 
 .. code-block:: rust
 
-    // os/src/task/pid.rs
+    // os/src/task/id.rs
 
-    struct PidAllocator {
+    pub struct RecycleAllocator {
         current: usize,
         recycled: Vec<usize>,
     }
 
-    impl PidAllocator {
+    impl RecycleAllocator {
         pub fn new() -> Self {
-            PidAllocator {
+            RecycleAllocator {
                 current: 0,
                 recycled: Vec::new(),
             }
         }
-        pub fn alloc(&mut self) -> PidHandle {
-            if let Some(pid) = self.recycled.pop() {
-                PidHandle(pid)
+        pub fn alloc(&mut self) -> usize {
+            if let Some(id) = self.recycled.pop() {
+                id
             } else {
                 self.current += 1;
-                PidHandle(self.current - 1)
+                self.current - 1
             }
         }
-        pub fn dealloc(&mut self, pid: usize) {
-            assert!(pid < self.current);
+        pub fn dealloc(&mut self, id: usize) {
+            assert!(id < self.current);
             assert!(
-                self.recycled.iter().find(|ppid| **ppid == pid).is_none(),
-                "pid {} has been deallocated!", pid
+                !self.recycled.iter().any(|i| *i == id),
+                "id {} has been deallocated!",
+                id
             );
-            self.recycled.push(pid);
+            self.recycled.push(id);
         }
     }
 
     lazy_static! {
-        static ref PID_ALLOCATOR: UPSafeCell<PidAllocator> =
-            unsafe { UPSafeCell::new(PidAllocator::new()) };
+        static ref PID_ALLOCATOR: UPSafeCell<RecycleAllocator> =
+            unsafe { UPSafeCell::new(RecycleAllocator::new()) };
     }
 
-``PidAllocator::alloc`` 将会分配出去一个将 ``usize`` 包装之后的 ``PidHandle`` 。
+``RecycleAllocator::alloc`` 分配出去的是 ``usize`` ，随后在 ``pid_alloc`` 中包装为 ``PidHandle`` 。
 我们将其包装为一个全局分配进程标识符的接口 ``pid_alloc``：
 
 .. code-block:: rust
 
-    // os/src/task/pid.rs
+    // os/src/task/id.rs
 
     pub fn pid_alloc() -> PidHandle {
-        PID_ALLOCATOR.exclusive_access().alloc()
+        PidHandle(PID_ALLOCATOR.exclusive_access().alloc())
     }
 
 同时我们也需要为 ``PidHandle`` 实现 ``Drop`` Trait 来允许编译器进行自动的资源回收：
 
 .. code-block:: rust
 
-    // os/src/task/pid.rs
+    // os/src/task/id.rs
 
     impl Drop for PidHandle {
         fn drop(&mut self) {
@@ -178,46 +179,45 @@
 内核栈
 ~~~~~~~~~~~~~~~~~~~~~~
 
-从本章开始，我们将应用编号替换为进程标识符来决定每个进程内核栈在地址空间中的位置。
+从本章开始，内核栈与进程 PID 解耦，使用独立的内核栈分配器 ``KSTACK_ALLOCATOR`` 来分配
+``kstack_id`` ，并由 ``kstack_id`` 决定内核栈在地址空间中的位置。
 
-在内核栈 ``KernelStack`` 中保存着它所属进程的 PID ：
+内核栈 ``KernelStack`` 中保存的是 ``kstack_id`` ：
 
 .. code-block:: rust
 
-    // os/src/task/pid.rs
+    // os/src/task/id.rs
 
-    pub struct KernelStack {
-        pid: usize,
-    }
+    pub struct KernelStack(pub usize);
 
 它提供以下方法：
 
 .. code-block:: rust
     :linenos:
 
-    // os/src/task/pid.rs
+    // os/src/task/id.rs
 
     /// Return (bottom, top) of a kernel stack in kernel space.
-    pub fn kernel_stack_position(app_id: usize) -> (usize, usize) {
-        let top = TRAMPOLINE - app_id * (KERNEL_STACK_SIZE + PAGE_SIZE);
+    pub fn kernel_stack_position(kstack_id: usize) -> (usize, usize) {
+        let top = TRAMPOLINE - kstack_id * (KERNEL_STACK_SIZE + PAGE_SIZE);
         let bottom = top - KERNEL_STACK_SIZE;
         (bottom, top)
     }
 
+    pub fn kstack_alloc() -> KernelStack {
+        let kstack_id = KSTACK_ALLOCATOR.exclusive_access().alloc();
+        let (kstack_bottom, kstack_top) = kernel_stack_position(kstack_id);
+        KERNEL_SPACE.exclusive_access().insert_framed_area(
+            kstack_bottom.into(),
+            kstack_top.into(),
+            MapPermission::R | MapPermission::W,
+        );
+        KernelStack(kstack_id)
+    }
+
     impl KernelStack {
-        pub fn new(pid_handle: &PidHandle) -> Self {
-            let pid = pid_handle.0;
-            let (kernel_stack_bottom, kernel_stack_top) = kernel_stack_position(pid);
-            KERNEL_SPACE.exclusive_access().insert_framed_area(
-                kernel_stack_bottom.into(),
-                kernel_stack_top.into(),
-                MapPermission::R | MapPermission::W,
-            );
-            KernelStack {
-                pid: pid_handle.0,
-            }
-        }
-        pub fn push_on_top<T>(&self, value: T) -> *mut T where
+        pub fn push_on_top<T>(&self, value: T) -> *mut T
+        where
             T: Sized, {
             let kernel_stack_top = self.get_top();
             let ptr_mut = (kernel_stack_top - core::mem::size_of::<T>()) as *mut T;
@@ -225,31 +225,29 @@
             ptr_mut
         }
         pub fn get_top(&self) -> usize {
-            let (_, kernel_stack_top) = kernel_stack_position(self.pid);
+            let (_, kernel_stack_top) = kernel_stack_position(self.0);
             kernel_stack_top
         }
     }
 
-- 第 11 行， ``new`` 方法可以从一个 ``PidHandle`` ，也就是一个已分配的进程标识符中对应生成一个内核栈 ``KernelStack`` 。
-  它调用了第 4 行声明的 ``kernel_stack_position`` 函数来根据进程标识符计算内核栈在内核地址空间中的位置，
-  随即在第 14 行将一个逻辑段插入内核地址空间 ``KERNEL_SPACE`` 中。
-- 第 25 行的 ``push_on_top`` 方法可以将一个类型为 ``T`` 的变量压入内核栈顶并返回其裸指针，
-  这也是一个泛型函数。它在实现的时候用到了第 32 行的 ``get_top`` 方法来获取当前内核栈顶在内核地址空间中的地址。
+- 第 11 行， ``kstack_alloc`` 会先从 ``KSTACK_ALLOCATOR`` 分配 ``kstack_id`` ，再调用 ``kernel_stack_position`` 计算内核栈在内核地址空间中的位置并插入逻辑段。
+- 第 22 行的 ``push_on_top`` 方法可以将一个类型为 ``T`` 的变量压入内核栈顶并返回其裸指针，这也是一个泛型函数。它在实现的时候用到了第 30 行的 ``get_top`` 方法来获取当前内核栈顶在内核地址空间中的地址。
 
 内核栈 ``KernelStack`` 用到了 RAII 的思想，具体来说，实际保存它的物理页帧的生命周期被绑定到它下面，当
 ``KernelStack`` 生命周期结束后，这些物理页帧也将会被编译器自动回收：
 
 .. code-block:: rust
 
-    // os/src/task/pid.rs
+    // os/src/task/id.rs
 
     impl Drop for KernelStack {
         fn drop(&mut self) {
-            let (kernel_stack_bottom, _) = kernel_stack_position(self.pid);
+            let (kernel_stack_bottom, _) = kernel_stack_position(self.0);
             let kernel_stack_bottom_va: VirtAddr = kernel_stack_bottom.into();
             KERNEL_SPACE
                 .exclusive_access()
                 .remove_area_with_start_vpn(kernel_stack_bottom_va.into());
+            KSTACK_ALLOCATOR.exclusive_access().dealloc(self.0);
         }
     }
 
@@ -426,7 +424,7 @@
 包括：
 
 - ``current`` 表示在当前处理器上正在执行的任务；
-- ``idle_task_cx_ptr`` 表示当前处理器上的 idle 控制流的任务上下文的地址。
+- ``idle_task_cx`` 表示当前处理器上的 idle 控制流任务上下文，地址可通过 ``get_idle_task_cx_ptr`` 获取。
 
 在单核环境下，我们仅创建单个 ``Processor`` 的全局实例 ``PROCESSOR`` ：
 
@@ -456,11 +454,11 @@
     }
 
     pub fn take_current_task() -> Option<Arc<TaskControlBlock>> {
-        PROCESSOR.take_current()
+        PROCESSOR.exclusive_access().take_current()
     }
 
     pub fn current_task() -> Option<Arc<TaskControlBlock>> {
-        PROCESSOR.current()
+        PROCESSOR.exclusive_access().current()
     }
 
     pub fn current_user_token() -> usize {
@@ -478,7 +476,7 @@
 
 
 - 第 4 行的 ``Processor::take_current`` 可以取出当前正在执行的任务。 ``Option::take`` 意味着 ``current`` 字段也变为 ``None`` 。
-- 第 7 行的 ``Processor::current`` 返回当前执行的任务的一份拷贝。。
+- 第 7 行的 ``Processor::current`` 返回当前执行任务的一份拷贝。
 - ``current_user_token`` 和 ``current_trap_cx`` 基于 ``current_task`` 实现，提供当前正在执行的任务的更多信息。
 
 
@@ -537,4 +535,4 @@
         }
     }
 
-切换回去之后，我们将跳转到 ``Processor::run`` 中 ``__switch`` 返回之后的位置，也即开启了下一轮循环。
+切换回去之后，我们将跳转到 ``run_tasks`` 中 ``__switch`` 返回之后的位置，也即开启了下一轮循环。

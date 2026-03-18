@@ -290,7 +290,7 @@
 <h3>waitpid 系统调用<a class="headerlink" href="#waitpid" title="永久链接至标题">¶</a></h3>
 <div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="sd">/// 功能：当前进程等待一个子进程变为僵尸进程，回收其全部资源并收集其返回值。</span>
 <span class="sd">/// 参数：pid 表示要等待的子进程的进程 ID，如果为 -1 的话表示等待任意一个子进程；</span>
-<span class="sd">/// exit_code 表示保存子进程返回值的地址，如果这个地址为 0 的话表示不必保存。</span>
+<span class="sd">/// exit_code 表示保存子进程返回值的地址（当前实现默认会向该地址写入退出码）。</span>
 <span class="sd">/// 返回值：如果要等待的子进程不存在则返回 -1；否则如果要等待的子进程均未结束则返回 -2；</span>
 <span class="sd">/// 否则返回结束的子进程的进程 ID。</span>
 <span class="sd">/// syscall ID：260</span>
@@ -359,9 +359,9 @@
 </pre></div>
 </div>
 <ul class="simple">
-<li><p>第 19 行为 <code class="docutils literal notranslate"><span class="pre">fork</span></code> 出的子进程分支，通过 <code class="docutils literal notranslate"><span class="pre">exec</span></code> 启动shell程序 <code class="docutils literal notranslate"><span class="pre">user_shell</span></code> ，
+<li><p>第 19 行为 <code class="docutils literal notranslate"><span class="pre">fork</span></code> 出的子进程分支，通过 <code class="docutils literal notranslate"><span class="pre">exec</span></code> 启动 shell 程序 <code class="docutils literal notranslate"><span class="pre">user_shell</span></code> ，
 注意我们需要在字符串末尾手动加入 <code class="docutils literal notranslate"><span class="pre">\0</span></code> 。</p></li>
-<li><p>第 21 行开始则为父进程分支，表示用户初始程序-initproc自身。它不断循环调用 <code class="docutils literal notranslate"><span class="pre">wait</span></code> 来等待并回收系统中的僵尸进程占据的资源。
+<li><p>第 21 行开始则为父进程分支，表示用户初始程序-initproc 自身。它不断循环调用 <code class="docutils literal notranslate"><span class="pre">wait</span></code> 来等待并回收系统中的僵尸进程占据的资源。
 如果回收成功的话则会打印一条报告信息给出被回收子进程的 PID 和返回值；否则就 <code class="docutils literal notranslate"><span class="pre">yield_</span></code> 交出 CPU 资源并在下次轮到它执行的时候再回收看看。</p></li>
 </ul>
 </div>
@@ -457,14 +457,14 @@
 <p>可以看到，在以第 25 行开头的主循环中，每次都是调用 <code class="docutils literal notranslate"><span class="pre">getchar</span></code> 获取一个用户输入的字符，
 并根据它相应进行一些动作。第 23 行声明的字符串 <code class="docutils literal notranslate"><span class="pre">line</span></code> 则维护着用户当前输入的命令内容，它也在不断发生变化。</p>
 <ul>
-<li><p>如果用户输入回车键（第 28 行），那么user_shell 会 fork 出一个子进程（第 34 行开始）并试图通过
+<li><p>如果用户输入回车键（第 28 行），那么 user_shell 会 fork 出一个子进程（第 34 行开始）并试图通过
 <code class="docutils literal notranslate"><span class="pre">exec</span></code> 系统调用执行一个应用，应用的名字在字符串 <code class="docutils literal notranslate"><span class="pre">line</span></code> 中给出。如果 exec 的返回值为 -1 ，
 说明在应用管理器中找不到对应名字的应用，此时子进程就直接打印错误信息并退出；否则子进程将开始执行目标应用。</p>
-<p>fork 之后的 user_shell 进程自己的逻辑可以在第 41 行找到。它在等待 fork 出来的子进程结束并回收掉它的资源，还会顺带收集子进程的退出状态并打印出来。</p>
+<p>fork 之后的 user_shell 进程自己的逻辑可以在第 41 行找到。它会等待子进程结束并回收其资源，还会顺带收集子进程的退出状态并打印出来。</p>
 </li>
 <li><p>如果用户输入退格键（第 53 行），首先我们需要将屏幕上当前行的最后一个字符用空格替换掉，
 这可以通过输入一个特殊的退格字节 <code class="docutils literal notranslate"><span class="pre">BS</span></code> 来实现。其次，user_shell 进程内维护的 <code class="docutils literal notranslate"><span class="pre">line</span></code> 也需要弹出最后一个字符。</p></li>
-<li><p>如果用户输入了一个其他字符（第 61 行），就接将它打印在屏幕上，并加入到 <code class="docutils literal notranslate"><span class="pre">line</span></code> 中。</p></li>
+<li><p>如果用户输入了其他字符（第 61 行），就将它打印在屏幕上，并加入到 <code class="docutils literal notranslate"><span class="pre">line</span></code> 中。</p></li>
 <li><p>按键 <code class="docutils literal notranslate"><span class="pre">Ctrl+A</span></code> 再输入 <code class="docutils literal notranslate"><span class="pre">X</span></code> 来退出qemu模拟器。</p></li>
 </ul>
 </div>

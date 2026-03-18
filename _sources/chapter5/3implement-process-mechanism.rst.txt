@@ -25,7 +25,7 @@
 
     lazy_static! {
         pub static ref INITPROC: Arc<TaskControlBlock> = Arc::new(TaskControlBlock::new(
-            get_app_data_by_name("initproc").unwrap()
+            get_app_data_by_name("ch5b_initproc").unwrap()
         ));
     }
 
@@ -34,7 +34,7 @@
     }
 
 我们调用 ``TaskControlBlock::new`` 来创建一个进程控制块，它需要传入 ELF 可执行文件的数据切片作为参数，
-这可以通过加载器 ``loader`` 子模块提供的 ``get_app_data_by_name`` 接口查找 ``initproc`` 的 ELF 数据来获得。在初始化
+这可以通过加载器 ``loader`` 子模块提供的 ``get_app_data_by_name`` 接口查找 ``ch5b_initproc`` 的 ELF 数据来获得。在初始化
 ``INITPROC`` 之后，则在 ``add_initproc`` 中可以调用 ``task`` 的任务管理器 ``manager`` 子模块提供的 ``add_task`` 接口将其加入到任务管理器。
 
 接下来介绍 ``TaskControlBlock::new`` 是如何实现的：
@@ -44,9 +44,9 @@
 
     // os/src/task/task.rs
 
-    use super::{PidHandle, pid_alloc, KernelStack};
+    use super::{kstack_alloc, pid_alloc};
     use super::TaskContext;
-    use crate::config::TRAP_CONTEXT;
+    use crate::config::TRAP_CONTEXT_BASE;
     use crate::trap::TrapContext;
 
     // impl TaskControlBlock
@@ -54,15 +54,13 @@
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
         let trap_cx_ppn = memory_set
-            .translate(VirtAddr::from(TRAP_CONTEXT).into())
+            .translate(VirtAddr::from(TRAP_CONTEXT_BASE).into())
             .unwrap()
             .ppn();
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
-        let kernel_stack = KernelStack::new(&pid_handle);
+        let kernel_stack = kstack_alloc();
         let kernel_stack_top = kernel_stack.get_top();
-        // push a task context which goes to trap_return to the top of kernel stack
-        let task_cx_ptr = kernel_stack.push_on_top(TaskContext::goto_trap_return());
         let task_control_block = Self {
             pid: pid_handle,
             kernel_stack,
@@ -90,12 +88,11 @@
         task_control_block
     }
 
-- 第 10 行，解析 ELF 得到应用地址空间 ``memory_set`` ，用户栈在应用地址空间中的位置 ``user_sp`` 以及应用的入口点 ``entry_point`` 。
-- 第 11 行，手动查页表找到应用地址空间中的 Trap 上下文实际所在的物理页帧。
-- 第 16~18 行，为新进程分配 PID 以及内核栈，并记录下内核栈在内核地址空间的位置 ``kernel_stack_top`` 。
-- 第 20 行，在该进程的内核栈上压入初始化的任务上下文，使得第一次任务切换到它的时候可以跳转到 ``trap_return`` 并进入用户态开始执行。
-- 第 21 行，整合之前的部分信息创建进程控制块 ``task_control_block`` 。
-- 第 39 行，初始化位于该进程应用地址空间中的 Trap 上下文，使得第一次进入用户态时，能正确跳转到应用入口点并设置好用户栈，
+- 第 10 行，先解析 ELF 得到应用地址空间 ``memory_set`` 、用户栈位置 ``user_sp`` 以及应用入口点 ``entry_point`` 。
+- 第 12 行，随后手动查页表，找到应用地址空间中 Trap 上下文所在的物理页帧。
+- 第 17~19 行，然后为新进程分配 PID 与内核栈，并记录内核栈顶地址 ``kernel_stack_top`` 。
+- 第 20 行，接着整合这些信息创建进程控制块 ``task_control_block`` ，并将任务上下文初始化为 ``TaskContext::goto_trap_return(kernel_stack_top)`` 。
+- 第 38~39 行，最后初始化位于该进程应用地址空间中的 Trap 上下文，使得第一次进入用户态时，能正确跳转到应用入口点并设置好用户栈，
   同时也保证在 Trap 的时候用户态能正确进入内核态。
 
 进程调度机制
@@ -137,7 +134,7 @@
 
     // os/src/task/mod.rs
 
-    use processor::{task_current_task, schedule};
+    use processor::{take_current_task, schedule};
     use manager::add_task;
 
     pub fn suspend_current_and_run_next() {
@@ -213,7 +210,7 @@ fork 系统调用的实现
 - 第 4 行的 ``MapArea::from_another`` 可以从一个逻辑段复制得到一个虚拟地址区间、映射方式和权限控制均相同的逻辑段，
   不同的是由于它还没有真正被映射到物理页帧上，所以 ``data_frames`` 字段为空。
 - 第 18 行的 ``MemorySet::from_existed_user`` 可以复制一个完全相同的地址空间。首先在第 19 行，我们通过 ``new_bare``
-  新创建一个空的地址空间，并在第 21 行通过 ``map_trampoline`` 为这个地址空间映射上跳板页面，这是因为我们解析 ELF
+  新创建一个空的地址空间，再在第 21 行通过 ``map_trampoline`` 为这个地址空间映射上跳板页面，这是因为我们解析 ELF
   创建地址空间的时候，并没有将跳板页作为一个单独的逻辑段插入到地址空间的逻辑段向量 ``areas`` 中，所以这里需要单独映射上。
 
   剩下的逻辑段都包含在 ``areas`` 中。我们遍历原地址空间中的所有逻辑段，将复制之后的逻辑段插入新的地址空间，
@@ -235,12 +232,12 @@ fork 系统调用的实现
             // copy user space(include trap context)
             let memory_set = MemorySet::from_existed_user(&parent_inner.memory_set);
             let trap_cx_ppn = memory_set
-                .translate(VirtAddr::from(TRAP_CONTEXT).into())
+                .translate(VirtAddr::from(TRAP_CONTEXT_BASE).into())
                 .unwrap()
                 .ppn();
             // alloc a pid and a kernel stack in kernel space
             let pid_handle = pid_alloc();
-            let kernel_stack = KernelStack::new(&pid_handle);
+            let kernel_stack = kstack_alloc();
             let kernel_stack_top = kernel_stack.get_top();
             let task_control_block = Arc::new(TaskControlBlock {
                 pid: pid_handle,
@@ -274,7 +271,7 @@ fork 系统调用的实现
 它基本上和新建进程控制块的 ``TaskControlBlock::new`` 是相同的，但要注意以下几点：
 
 - 子进程的地址空间不是通过解析 ELF，而是通过在第 8 行调用 ``MemorySet::from_existed_user`` 复制父进程地址空间得到的；
-- 在 fork 的时候需要注意父子进程关系的维护。既要将父进程的弱引用计数放到子进程的进程控制块中，又要将子进程插入到父进程的孩子向量 ``children`` 中。
+- 在 fork 的时候需要注意父子进程关系的维护。既要在第 27 行将父进程的弱引用计数放到子进程的进程控制块中，又要在第 34 行将子进程插入到父进程的孩子向量 ``children`` 中。
 
 实现 ``sys_fork`` 时，我们需要特别注意如何体现父子进程的差异：
 
@@ -319,7 +316,7 @@ exec 系统调用的实现
             // memory_set with elf program headers/trampoline/trap context/user stack
             let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
             let trap_cx_ppn = memory_set
-                .translate(VirtAddr::from(TRAP_CONTEXT).into())
+                .translate(VirtAddr::from(TRAP_CONTEXT_BASE).into())
                 .unwrap()
                 .ppn();
 
@@ -525,7 +522,7 @@ sys_read 获取输入
             Trap::Exception(Exception::LoadFault) |
             Trap::Exception(Exception::LoadPageFault) => {
                 println!(
-                    "[kernel] {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, core dumped.",
+                    "[kernel] trap_handler:  {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
                     scause.cause(),
                     stval,
                     current_trap_cx().sepc,
@@ -534,7 +531,7 @@ sys_read 获取输入
                 exit_current_and_run_next(-2);
             }
             Trap::Exception(Exception::IllegalInstruction) => {
-                println!("[kernel] IllegalInstruction in application, core dumped.");
+                println!("[kernel] IllegalInstruction in application, kernel killed it.");
                 // illegal instruction exit code
                 exit_current_and_run_next(-3);
             }
@@ -593,14 +590,12 @@ sys_read 获取输入
     }
 
 
-- 第 13 行，调用 ``take_current_task`` 来将当前进程控制块从处理器监控 ``PROCESSOR``
-  中取出，而不只是得到一份拷贝，这是为了正确维护进程控制块的引用计数；
-- 第 17 行将进程控制块中的状态修改为 ``TaskStatus::Zombie`` 即僵尸进程；
-- 第 19 行将传入的退出码 ``exit_code`` 写入进程控制块中，后续父进程在 ``waitpid`` 的时候可以收集；
-- 第 24~26 行所做的事情是，将当前进程的所有子进程挂在初始进程 ``initproc`` 下面。第 32 行将当前进程的孩子向量清空。
-- 第 34 行，对于当前进程占用的资源进行早期回收。 ``MemorySet::recycle_data_pages`` 只是将地址空间中的逻辑段列表
+- 第 13 行，首先调用 ``take_current_task`` 将当前进程控制块从处理器监控 ``PROCESSOR`` 中取出，而不只是得到一份拷贝，这是为了正确维护进程控制块的引用计数；
+- 第 17 行，接着将进程状态修改为 ``TaskStatus::Zombie`` ，并在第 19 行写入退出码 ``exit_code`` ，后续父进程在 ``waitpid`` 的时候可以收集；
+- 第 25~27 行，随后将当前进程的所有子进程挂到初始进程 ``INITPROC`` 下面，并在第 32 行清空当前进程的孩子向量 ``children`` 。
+- 第 34 行，然后对当前进程占用的资源进行早期回收。 ``MemorySet::recycle_data_pages`` 只是将地址空间中的逻辑段列表
   ``areas`` 清空，这将导致应用地址空间的所有数据被存放在的物理页帧被回收，而用来存放页表的那些物理页帧此时则不会被回收。
-- 最后在第 41 行我们调用 ``schedule`` 触发调度及任务切换，我们再也不会回到该进程的执行过程，因此无需关心任务上下文的保存。
+- 最后在第 41 行调用 ``schedule`` 触发调度及任务切换，我们再也不会回到该进程的执行过程，因此无需关心任务上下文的保存。
 
 父进程回收子进程资源
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
