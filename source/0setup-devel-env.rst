@@ -14,10 +14,10 @@
 OS 环境配置
 -------------------------------
 
-目前，实验主要支持 Ubuntu18.04/20.04 操作系统。使用 Windows10 和 macOS 的读者，可以安装一台 Ubuntu18.04 虚拟机或 Docker
+目前，实验主要支持 Ubuntu 20.04/22.04 操作系统。Ubuntu 18.04 也可尝试，但在新版本工具链下可能需要额外处理依赖问题。使用 Windows 和 macOS 的读者，可以安装一台 Ubuntu 虚拟机或 Docker
 进行实验。
 
-Windows10 用户可以通过系统内置的 **WSL2** 虚拟机（请不要使用 WSL1）来安装 Ubuntu 18.04 / 20.04 。读者请自行在互联网上搜索相关安装教程，或 `适用于 Linux 的 Windows 子系统安装指南 (Windows 10) <https://docs.microsoft.com/zh-cn/windows/wsl/install-win10#step-4---download-the-linux-kernel-update-package>`_ 。
+Windows 10/11 用户可以通过系统内置的 **WSL2** 虚拟机（请不要使用 WSL1）来安装 Ubuntu。读者请自行在互联网上搜索相关安装教程，或参考 `Install WSL <https://learn.microsoft.com/windows/wsl/install>`_ 。
 
 .. note::
 
@@ -25,12 +25,12 @@ Windows10 用户可以通过系统内置的 **WSL2** 虚拟机（请不要使用
 
    感谢 dinghao188 和张汉东老师帮忙配置好的 Docker 开发环境，进入 Docker 开发环境之后不需要任何软件工具链的安装和配置，可以直接将 tutorial 运行起来，目前应该仅支持将 tutorial 运行在 Qemu 模拟器上。
 
-   使用方法如下（以 Ubuntu18.04 为例）：
+   使用方法如下（以 Ubuntu 22.04 为例）：
 
    1. 通过 ``su`` 切换到管理员账户 ``root`` ；
-   2. 在 ``rCore-Tutorial`` 根目录下 ``make docker`` 进入到 Docker 环境；
+   2. 在 ``rCore-Tutorial-Code`` 根目录下 ``make docker`` 进入到 Docker 环境；
    3. 进入 Docker 之后，会发现当前处于根目录 ``/`` ，我们通过 ``cd mnt`` 将当前工作路径切换到 ``/mnt`` 目录；
-   4. 通过 ``ls`` 可以发现 ``/mnt`` 目录下的内容和 ``rCore-Tutorial-v3`` 目录下的内容完全相同，接下来就可以在这个环境下运行 tutorial 了。例如 ``cd os && make run`` 。
+   4. 通过 ``ls`` 可以发现 ``/mnt`` 目录下的内容和 ``rCore-Tutorial-Code`` 目录下的内容完全相同，接下来就可以在这个环境下运行 tutorial 了。例如 ``cd os && make run`` 。
 
 使用 macOS 进行实验理论上也是可行的，但本章节仅介绍 Ubuntu 下的环境配置方案。
 
@@ -125,62 +125,96 @@ Rust 开发环境配置
 Qemu 模拟器安装
 ----------------------------------------
 
-我们需要使用 Qemu 7.0.0 版本进行实验，为此，从源码手动编译安装 Qemu 模拟器：
+推荐使用预编译版本的 Qemu 7.0.0，避免本地源码编译带来的依赖和构建环境问题。
 
-.. attention::
+推荐下载地址：
 
-   如果使用 Qemu8，你需要：
+- `xPack QEMU RISC-V v7.0.0-1 <https://github.com/xpack-dev-tools/qemu-riscv-xpack/releases/tag/v7.0.0-1>`_
 
-   * 替换 ``bootloader/rustsbi-qemu.bin`` 为最新版 `在这里下载 <https://github.com/rustsbi/rustsbi-qemu/releases>`_ 后更名为 ``bootloader/rustsbi-qemu.bin`` 并替换同名文件即可
-   * 将 ``os/src/sbi.rs`` 中的常量 ``SBI_SHUTDOWN`` 的值替换为 ``const SBI_SHUTDOWN: usize = 0x53525354;``，``SBI_SET_TIMER`` 的值替换为 ``const SBI_SET_TIMER: usize = 0x54494D45;``
-   
-.. attention::
+请根据你的系统选择对应的压缩包（例如 ``linux-x64``、``linux-arm64``、``darwin-arm64``、``win32-x64``）。
 
-   也可以使用 Qemu6，但要小心潜在的不兼容问题！
+以 Linux x64 为例：
 
 .. code-block:: bash
 
-   # 安装编译所需的依赖包
-   sudo apt install autoconf automake autotools-dev curl libmpc-dev libmpfr-dev libgmp-dev \
-                 gawk build-essential bison flex texinfo gperf libtool patchutils bc \
-                 zlib1g-dev libexpat-dev pkg-config  libglib2.0-dev libpixman-1-dev git tmux python3
-   # 下载源码包
-   # 如果下载速度过慢可以使用我们提供的百度网盘链接：https://pan.baidu.com/s/1z-iWIPjxjxbdFS2Qf-NKxQ
-   # 提取码 8woe
-   wget https://download.qemu.org/qemu-7.0.0.tar.xz
-   # 解压
-   tar xvJf qemu-7.0.0.tar.xz
-   # 编译安装并配置 RISC-V 支持
-   cd qemu-7.0.0
-   ./configure --target-list=riscv64-softmmu,riscv64-linux-user
-   make -j$(nproc)
+   mkdir -p $HOME/os-env
+   cd $HOME/os-env
+   wget https://github.com/xpack-dev-tools/qemu-riscv-xpack/releases/download/v7.0.0-1/xpack-qemu-riscv-7.0.0-1-linux-x64.tar.gz
+   wget https://github.com/xpack-dev-tools/qemu-riscv-xpack/releases/download/v7.0.0-1/xpack-qemu-riscv-7.0.0-1-linux-x64.tar.gz.sha
+   sha256sum -c xpack-qemu-riscv-7.0.0-1-linux-x64.tar.gz.sha
+   tar xzf xpack-qemu-riscv-7.0.0-1-linux-x64.tar.gz
+
+将 Qemu 加入 ``PATH``（建议写入 ``~/.bashrc``）：
+
+.. code-block:: bash
+
+   export PATH="$HOME/os-env/xpack-qemu-riscv-7.0.0-1/bin:$PATH"
+
+随后执行：
+
+.. code-block:: bash
+
+   source ~/.bashrc
 
 .. note::
 
-   注意，上面的依赖包可能并不完全，比如在 Ubuntu 18.04 上：
+   如果你不想修改全局环境变量，也可以在执行实验命令前临时设置 PATH：
 
-   - 出现 ``ERROR: pkg-config binary 'pkg-config' not found`` 时，可以安装 ``pkg-config`` 包；
-   - 出现 ``ERROR: glib-2.48 gthread-2.0 is required to compile QEMU`` 时，可以安装
-     ``libglib2.0-dev`` 包；
-   - 出现 ``ERROR: pixman >= 0.21.8 not present`` 时，可以安装 ``libpixman-1-dev`` 包。
+   .. code-block:: bash
 
-   另外一些 Linux 发行版编译 Qemu 的依赖包可以从 `这里 <https://risc-v-getting-started-guide.readthedocs.io/en/latest/linux-qemu.html#prerequisites>`_
-   找到。
+      export PATH="$HOME/os-env/xpack-qemu-riscv-7.0.0-1/bin:$PATH"
 
-   请自行选择合适的编译器版本编译Qemu。
+.. attention::
 
-之后我们可以在同目录下 ``sudo make install`` 将 Qemu 安装到 ``/usr/local/bin`` 目录下，但这样经常会引起
-冲突。个人来说更习惯的做法是，编辑 ``~/.bashrc`` 文件（如果使用的是默认的 ``bash`` 终端），在文件的末尾加入
-几行：
+   也可以尝试 Qemu 8，但不同章节分支可能需要额外兼容性调整（例如 RustSBI 二进制或 SBI 调用实现）。如果你希望减少环境变量，优先使用 Qemu 7.0.0。
 
-.. code-block:: bash
+如果你必须源码编译 Qemu（例如教学或调试需求），可以参考下面的折叠内容；对一般实验同学不再推荐。
 
-   # 注意 $HOME 是 Linux 自动设置的表示你家目录的环境变量，你也可以根据实际位置灵活调整
-   export PATH="$HOME/os-env/qemu-7.0.0/build/:$PATH"
-   export PATH="$HOME/os-env/qemu-7.0.0/build/riscv64-softmmu:$PATH"
-   export PATH="$HOME/os-env/qemu-7.0.0/build/riscv64-linux-user:$PATH"
+.. dropdown:: 旧版参考：从源码编译 Qemu 7.0.0（可展开）
+   :icon: code
+   :color: secondary
+   :animate: fade-in-slide-down
 
-随后即可在当前终端 ``source ~/.bashrc`` 更新系统路径，或者直接重启一个新的终端。
+   .. code-block:: bash
+
+      # Install build dependencies
+      sudo apt install autoconf automake autotools-dev curl libmpc-dev libmpfr-dev libgmp-dev \
+                    gawk build-essential bison flex texinfo gperf libtool patchutils bc \
+                    zlib1g-dev libexpat-dev pkg-config libglib2.0-dev libpixman-1-dev \
+                    ninja-build libsdl2-dev git tmux python3
+
+      # Download and extract source
+      mkdir -p $HOME/os-env
+      cd $HOME/os-env
+      wget https://download.qemu.org/qemu-7.0.0.tar.xz
+      tar xvf qemu-7.0.0.tar.xz
+
+      # Configure and build
+      cd qemu-7.0.0
+      ./configure --target-list=riscv64-softmmu,riscv64-linux-user
+      make -j$(nproc)
+
+   .. note::
+
+      常见错误及处理：
+
+      - ``ERROR: pkg-config binary 'pkg-config' not found``：安装 ``pkg-config``；
+      - ``ERROR: glib-2.48 gthread-2.0 is required to compile QEMU``：安装 ``libglib2.0-dev``；
+      - ``ERROR: pixman >= 0.21.8 not present``：安装 ``libpixman-1-dev``。
+
+   推荐不要直接 ``sudo make install``，避免覆盖系统自带 Qemu。更稳妥的做法是仅通过 PATH 指向构建产物：
+
+   .. code-block:: bash
+
+      export PATH="$HOME/os-env/qemu-7.0.0/build:$PATH"
+      export PATH="$HOME/os-env/qemu-7.0.0/build/riscv64-softmmu:$PATH"
+      export PATH="$HOME/os-env/qemu-7.0.0/build/riscv64-linux-user:$PATH"
+
+      # Optional: persist for new shells
+      echo 'export PATH="$HOME/os-env/qemu-7.0.0/build:$PATH"' >> ~/.bashrc
+      echo 'export PATH="$HOME/os-env/qemu-7.0.0/build/riscv64-softmmu:$PATH"' >> ~/.bashrc
+      echo 'export PATH="$HOME/os-env/qemu-7.0.0/build/riscv64-linux-user:$PATH"' >> ~/.bashrc
+      source ~/.bashrc
 
 确认 Qemu 的版本：
 
@@ -240,7 +274,7 @@ Qemu 模拟器安装
 
    请务必执行 ``make run``，这将为你安装一些上文没有提及的 Rust 包依赖。
 
-   如果卡在了
+   如果你在后续章节卡在了
 
    .. code-block::
 

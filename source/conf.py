@@ -33,8 +33,9 @@ html_search_language = 'zh'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    "sphinx_comments",
-#    "sphinx_tabs.tabs"
+    'sphinx_comments',
+    'sphinx_design',
+    #    'sphinx_tabs.tabs'
 ]
 
 comments_config = {

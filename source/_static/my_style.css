@@ -1,3 +1,13 @@
 .wy-nav-content {
     max-width: 1200px !important;
 }
+
+.sd-dropdown {
+    border-radius: 10px;
+    border: 1px solid var(--color-sidebar-background-border);
+    overflow: hidden;
+}
+
+.sd-dropdown .sd-summary-title {
+    font-weight: 600;
+}

@@ -2,7 +2,7 @@
 
 ## Code
 
-- [Soure Code of labs](https://github.com/LearningOS/rCore-Tutorial-Code)
+- [Source Code of labs](https://github.com/LearningOS/rCore-Tutorial-Code)
 
 ## Documents
 
@@ -20,7 +20,6 @@
   AND [OS API docs of ch6](https://learningos.github.io/rCore-Tutorial-Code/ch6/os/index.html)
 - [OS API docs of ch7](https://learningos.github.io/rCore-Tutorial-Code/ch7/os/index.html)
   AND [OS API docs of ch8](https://learningos.github.io/rCore-Tutorial-Code/ch8/os/index.html)
-- [OS API docs of ch9](https://learningos.github.io/rCore-Tutorial-Code/ch9/os/index.html)
 
 ## Related Resources
 
@@ -38,7 +37,7 @@ $ git checkout ch$ID
 $ make run
 ```
 
-Notice: $ID is from [1-9]
+Notice: $ID is from [1-8]
 
 ## Grading
 
