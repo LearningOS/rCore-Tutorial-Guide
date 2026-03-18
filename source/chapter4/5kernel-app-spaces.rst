@@ -550,9 +550,16 @@ CPU 处于内核态访问，且只能读或写。
                 MapType::Framed,
                 MapPermission::R | MapPermission::W | MapPermission::U,
             ), None);
+            // used in sbrk
+            memory_set.push(MapArea::new(
+                user_stack_top.into(),
+                user_stack_top.into(),
+                MapType::Framed,
+                MapPermission::R | MapPermission::W | MapPermission::U,
+            ), None);
             // map TrapContext
             memory_set.push(MapArea::new(
-                TRAP_CONTEXT.into(),
+                TRAP_CONTEXT_BASE.into(),
                 TRAMPOLINE.into(),
                 MapType::Framed,
                 MapPermission::R | MapPermission::W,
