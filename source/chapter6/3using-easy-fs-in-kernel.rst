@@ -113,7 +113,7 @@
         fn readable(&self) -> bool { self.readable }
         fn writable(&self) -> bool { self.writable }
         fn read(&self, mut buf: UserBuffer) -> usize {
-            let mut inner = self.inner.lock();
+            let mut inner = self.inner.exclusive_access();
             let mut total_read_size = 0usize;
             for slice in buf.buffers.iter_mut() {
                 let read_size = inner.inode.read_at(inner.offset, *slice);
@@ -126,7 +126,7 @@
             total_read_size
         }
         fn write(&self, buf: UserBuffer) -> usize {
-            let mut inner = self.inner.lock();
+            let mut inner = self.inner.exclusive_access();
             let mut total_write_size = 0usize;
             for slice in buf.buffers.iter() {
                 let write_size = inner.inode.write_at(inner.offset, *slice);
@@ -138,7 +138,7 @@
         }
     }
 
-``read/write`` 的实现也比较简单，只需遍历 ``UserBuffer`` 中的每个缓冲区片段，调用 ``Inode`` 写好的 ``read/write_at`` 接口就好了。注意 ``read/write_at`` 的起始位置是在 ``OSInode`` 中维护的 ``offset`` ，这个 ``offset`` 也随着遍历的进行被持续更新。在 ``read/write`` 的全程需要获取 ``OSInode`` 的互斥锁，保证两个进程无法同时访问同个文件。
+``read/write`` 的实现也比较简单，只需遍历 ``UserBuffer`` 中的每个缓冲区片段，调用 ``Inode`` 写好的 ``read_at/write_at`` 接口就好了。注意 ``read_at/write_at`` 的起始位置是在 ``OSInode`` 中维护的 ``offset`` ，这个 ``offset`` 也随着遍历的进行被持续更新。在 ``read/write`` 的全程需要获取 ``OSInode`` 的互斥锁，保证两个进程无法同时访问同一个文件。
 
 本章我们为 ``File`` Trait 新增了 ``readable/writable`` 两个抽象接口，从而在 ``sys_read/sys_write`` 的时候进行简单的访问权限检查。 
 
@@ -173,7 +173,7 @@
         for app in ROOT_INODE.ls() {
             println!("{}", app);
         }
-        println!("**************/")
+        println!("**************/");
     }
 
 
@@ -266,32 +266,21 @@
 
 .. code-block:: rust
     :linenos:
-    :emphasize-lines: 17-25
+    :emphasize-lines: 6-13
 
     // os/src/syscall/process.rs
 
-    pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
-    let token = current_user_token();
-    let path = translated_str(token, path);
-    let mut args_vec: Vec<String> = Vec::new();
-    loop {
-        let arg_str_ptr = *translated_ref(token, args);
-        if arg_str_ptr == 0 {
-            break;
+    pub fn sys_exec(path: *const u8) -> isize {
+        let token = current_user_token();
+        let path = translated_str(token, path);
+        if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
+            let all_data = app_inode.read_all();
+            let task = current_task().unwrap();
+            task.exec(all_data.as_slice());
+            0
+        } else {
+            -1
         }
-        args_vec.push(translated_str(token, arg_str_ptr as *const u8));
-        unsafe {
-            args = args.add(1);
-        }
-    }
-    if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
-        let all_data = app_inode.read_all();
-        let task = current_task().unwrap();
-        let argc = args_vec.len();
-        task.exec(all_data.as_slice(), args_vec);
-        argc as isize
-    } else {
-        -1
     }
 
 注意上面代码片段中的高亮部分。当执行获取应用的 ELF 数据的操作时，首先调用 ``open_file`` 函数，以只读的方式在内核中打开应用文件并获取它对应的 ``OSInode`` 。接下来可以通过 ``OSInode::read_all`` 将该文件的数据全部读到一个向量 ``all_data`` 中：
