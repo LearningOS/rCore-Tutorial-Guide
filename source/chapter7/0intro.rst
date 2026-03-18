@@ -62,34 +62,34 @@
 
 .. code-block::
 
-    ── os
-       └── src
-           ├── ...
-           ├── fs
-           │   ├── inode.rs
-           │   ├── mod.rs
-           │   ├── pipe.rs(新增：实现了 File Trait 的第三个实现——可用来进程间通信的管道)
-           │   └── stdio.rs
-           ├── mm
-           │   ├── address.rs
-           │   ├── frame_allocator.rs
-           │   ├── heap_allocator.rs
-           │   ├── memory_set.rs
-           │   ├── mod.rs
-           │   └── page_table.rs
-           ├── syscall
-           │   ├── fs.rs(修改：添加了sys_pipe和sys_dup)
-           │   ├── mod.rs
-           │   └── process.rs(修改：sys_exec添加了对参数的支持)
-           ├── task
-               ├── context.rs
-               ├── manager.rs
-               ├── mod.rs
-               ├── pid.rs
-               ├── processor.rs
-               ├── switch.rs
-               ├── switch.S
-               └── task.rs(修改：在exec中将参数压入用户栈中)
+    os
+    └── src
+        ├── ...
+        ├── fs
+        │   ├── inode.rs
+        │   ├── mod.rs
+        │   ├── pipe.rs (新增：实现了 File Trait 的第三个实现——可用来进程间通信的管道)
+        │   └── stdio.rs
+        ├── mm
+        │   ├── address.rs
+        │   ├── frame_allocator.rs
+        │   ├── heap_allocator.rs
+        │   ├── memory_set.rs
+        │   ├── mod.rs
+        │   └── page_table.rs
+        ├── syscall
+        │   ├── fs.rs (修改：添加了 sys_pipe 和 sys_dup)
+        │   ├── mod.rs
+        │   └── process.rs (修改：sys_exec 添加了对参数的支持)
+        └── task
+            ├── context.rs
+            ├── manager.rs
+            ├── mod.rs
+            ├── id.rs
+            ├── processor.rs
+            ├── switch.rs
+            ├── switch.S
+            └── task.rs (修改：在 exec 中将参数压入用户栈中)
 
    cloc easy-fs os
    -------------------------------------------------------------------------------
