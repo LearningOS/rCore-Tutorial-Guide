@@ -291,13 +291,17 @@ mutex 系统调用的实现
             };
             id as isize
         } else {
-            process_inner.mutex_list.push(Some(Arc::new(MutexSpin::new())));
+            process_inner.mutex_list.push(if !blocking {
+                Some(Arc::new(MutexSpin::new()))
+            } else {
+                Some(Arc::new(MutexBlocking::new()))
+            });
             process_inner.mutex_list.len() as isize - 1
         }
     }
 
-- 第 14 行，如果向量中有空的元素，就在这个空元素的位置创建一个可睡眠的互斥锁；
-- 第 18 行，如果向量满了，就在向量中添加新的可睡眠的互斥锁；
+- 第 14 行，如果向量中有空的元素，就在这个空元素的位置创建互斥锁：当 ``blocking = false`` 时创建自旋锁 ``MutexSpin``，当 ``blocking = true`` 时创建可睡眠的互斥锁 ``MutexBlocking``；
+- 第 18 行，如果向量满了，就在向量末尾添加一个新的互斥锁，同样根据 ``blocking`` 参数在 ``MutexSpin``（自旋锁）和 ``MutexBlocking``（可睡眠互斥锁）之间进行选择。
 
 
 有了互斥锁，接下来就是实现 ``Mutex`` trait的内核函数：对应 ``SYSCALL_MUTEX_LOCK`` 系统调用的
@@ -375,5 +379,3 @@ mutex 系统调用的实现
 - 第 8 行，调用 ID 为 ``mutex_id`` 的互斥锁 ``mutex`` 的 ``unlock`` 方法，具体工作由该方法来完成的。
 - 第 17-18 行，如果有等待的线程，唤醒等待最久的那个线程，相当于将锁的所有权移交给该线程。
 - 第 20 行，若没有线程等待，则释放锁。
-
-

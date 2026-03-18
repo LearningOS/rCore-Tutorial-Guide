@@ -286,7 +286,7 @@
 <div class="section" id="shell">
 <h3>shell程序的命令行参数分割<a class="headerlink" href="#shell" title="永久链接至标题">¶</a></h3>
 <p>回忆一下，在shell程序 <code class="docutils literal notranslate"><span class="pre">user_shell</span></code> 中，一旦接收到一个回车，我们就会将当前行的内容 <code class="docutils literal notranslate"><span class="pre">line</span></code> 作为一个名字并试图去执行同名的应用。但是现在 <code class="docutils literal notranslate"><span class="pre">line</span></code> 还可能包含一些命令行参数，只有最开头的一个才是要执行的应用名。因此我们要做的第一件事情就是将 <code class="docutils literal notranslate"><span class="pre">line</span></code> 用空格分割：</p>
-<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="c1">// user/src/bin/ch6b_user_shell.rs</span>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="c1">// user/src/bin/ch7b_user_shell.rs</span>
 
 <span class="kd">let</span><span class="w"> </span><span class="n">args</span>: <span class="nb">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">line</span><span class="p">.</span><span class="n">as_str</span><span class="p">().</span><span class="n">split</span><span class="p">(</span><span class="sc">' '</span><span class="p">).</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
 <span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">args_copy</span>: <span class="nb">Vec</span><span class="o">&lt;</span><span class="nb">String</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">args</span><span class="w"></span>
@@ -306,7 +306,7 @@
 </pre></div>
 </div>
 <p>经过分割， <code class="docutils literal notranslate"><span class="pre">args</span></code> 中的 <code class="docutils literal notranslate"><span class="pre">&amp;str</span></code> 都是 <code class="docutils literal notranslate"><span class="pre">line</span></code> 中的一段子区间，它们的结尾并没有包含 <code class="docutils literal notranslate"><span class="pre">\0</span></code> ，因为 <code class="docutils literal notranslate"><span class="pre">line</span></code> 是我们输入得到的，中间本来就没有 <code class="docutils literal notranslate"><span class="pre">\0</span></code> 。由于在向内核传入字符串的时候，我们只能传入字符串的起始地址，因此我们必须保证其结尾为 <code class="docutils literal notranslate"><span class="pre">\0</span></code> 。从而我们用 <code class="docutils literal notranslate"><span class="pre">args_copy</span></code> 将 <code class="docutils literal notranslate"><span class="pre">args</span></code> 中的字符串拷贝一份到堆上并在末尾手动加入 <code class="docutils literal notranslate"><span class="pre">\0</span></code> 。这样就可以安心的将 <code class="docutils literal notranslate"><span class="pre">args_copy</span></code> 中的字符串传入内核了。我们用 <code class="docutils literal notranslate"><span class="pre">args_addr</span></code> 来收集这些字符串的起始地址：</p>
-<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="c1">// user/src/bin/ch6b_user_shell.rs</span>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="c1">// user/src/bin/ch7b_user_shell.rs</span>
 
 <span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">args_addr</span>: <span class="nb">Vec</span><span class="o">&lt;*</span><span class="k">const</span><span class="w"> </span><span class="kt">u8</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">args_copy</span><span class="w"></span>
 <span class="p">.</span><span class="n">iter</span><span class="p">()</span><span class="w"></span>
@@ -395,7 +395,7 @@
 <span class="linenos">44</span><span class="w">            </span><span class="n">entry_point</span><span class="p">,</span><span class="w"></span>
 <span class="hll"><span class="linenos">45</span><span class="w">            </span><span class="n">user_sp</span><span class="p">,</span><span class="w"></span>
 </span><span class="linenos">46</span><span class="w">            </span><span class="n">KERNEL_SPACE</span><span class="p">.</span><span class="n">exclusive_access</span><span class="p">().</span><span class="n">token</span><span class="p">(),</span><span class="w"></span>
-<span class="linenos">47</span><span class="w">            </span><span class="bp">self</span><span class="p">.</span><span class="n">kernel_stack</span><span class="p">.</span><span class="n">get_top</span><span class="p">(),</span><span class="w"></span>
+<span class="linenos">47</span><span class="w">            </span><span class="bp">self</span><span class="p">.</span><span class="n">kstack</span><span class="p">.</span><span class="n">get_top</span><span class="p">(),</span><span class="w"></span>
 <span class="linenos">48</span><span class="w">            </span><span class="n">trap_handler</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">usize</span><span class="p">,</span><span class="w"></span>
 <span class="linenos">49</span><span class="w">        </span><span class="p">);</span><span class="w"></span>
 <span class="hll"><span class="linenos">50</span><span class="w">        </span><span class="n">trap_cx</span><span class="p">.</span><span class="n">x</span><span class="p">[</span><span class="mi">10</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">args</span><span class="p">.</span><span class="n">len</span><span class="p">();</span><span class="w"></span>
@@ -446,7 +446,7 @@
 </pre></div>
 </div>
 <p>可以看到，在入口 <code class="docutils literal notranslate"><span class="pre">_start</span></code> 中我们就接收到了命令行参数个数 <code class="docutils literal notranslate"><span class="pre">argc</span></code> 和字符串数组的起始地址 <code class="docutils literal notranslate"><span class="pre">argv</span></code> 。但是这个起始地址不太好用，我们希望能够将其转化为编写应用的时候看到的 <code class="docutils literal notranslate"><span class="pre">&amp;[&amp;str]</span></code> 的形式。转化的主体在第 10~23 行，就是分别取出 <code class="docutils literal notranslate"><span class="pre">argc</span></code> 个字符串的起始地址（基于字符串数组的 base 地址 <code class="docutils literal notranslate"><span class="pre">argv</span></code> ），从它向后找到第一个 <code class="docutils literal notranslate"><span class="pre">\0</span></code> 就可以得到一个完整的 <code class="docutils literal notranslate"><span class="pre">&amp;str</span></code> 格式的命令行参数字符串并加入到向量 <code class="docutils literal notranslate"><span class="pre">v</span></code> 中。最后通过 <code class="docutils literal notranslate"><span class="pre">v.as_slice</span></code> 就得到了我们在 <code class="docutils literal notranslate"><span class="pre">main</span></code> 主函数中看到的 <code class="docutils literal notranslate"><span class="pre">&amp;[&amp;str]</span></code> 。</p>
-<p>有了命令行参数支持，我们就可以编写命令行工具 <code class="docutils literal notranslate"><span class="pre">ch6b_cat</span></code> 来输出指定文件的内容了。读者可以自行参阅其实现。</p>
+<p>有了命令行参数支持，我们就可以编写命令行工具 <code class="docutils literal notranslate"><span class="pre">ch7b_cat</span></code> 来输出指定文件的内容了。读者可以自行参阅其实现。</p>
 </div>
 </div>
 <div class="section" id="id3">
@@ -484,7 +484,7 @@
 </div>
 <p>在 <code class="docutils literal notranslate"><span class="pre">sys_dup</span></code> 函数中，首先检查传入 <code class="docutils literal notranslate"><span class="pre">fd</span></code> 的合法性。然后在文件描述符表中分配一个新的文件描述符，并保存 <code class="docutils literal notranslate"><span class="pre">fd</span></code> 指向的已打开文件的一份拷贝即可。</p>
 <p>在shell程序 <code class="docutils literal notranslate"><span class="pre">user_shell</span></code> 分割命令行参数的时候，我们要检查是否存在通过 <code class="docutils literal notranslate"><span class="pre">&lt;</span></code> 或 <code class="docutils literal notranslate"><span class="pre">&gt;</span></code> 进行输入输出重定向的情况，如果存在的话则需要将它们从命令行参数中移除，并记录匹配到的输入文件名或输出文件名到字符串 <code class="docutils literal notranslate"><span class="pre">input</span></code> 或 <code class="docutils literal notranslate"><span class="pre">output</span></code> 中。注意，为了实现方便，我们这里假设输入shell程序的命令一定合法：即 <code class="docutils literal notranslate"><span class="pre">&lt;</span></code> 或 <code class="docutils literal notranslate"><span class="pre">&gt;</span></code> 最多只会出现一次，且后面总是会有一个参数作为重定向到的文件。</p>
-<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="c1">// user/src/bin/ch6b_user_shell.rs</span>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="c1">// user/src/bin/ch7b_user_shell.rs</span>
 
 <span class="c1">// redirect input</span>
 <span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">input</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">String</span>::<span class="n">new</span><span class="p">();</span><span class="w"></span>
@@ -508,7 +508,7 @@
 </pre></div>
 </div>
 <p>打开文件和替换的过程则发生在 <code class="docutils literal notranslate"><span class="pre">fork</span></code> 之后的子进程分支中：</p>
-<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="c1">// user/src/bin/user_shell.rs</span>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="c1">// user/src/bin/ch7b_user_shell.rs</span>
 <span class="linenos"> 2</span>
 <span class="linenos"> 3</span><span class="kd">let</span><span class="w"> </span><span class="n">pid</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fork</span><span class="p">();</span><span class="w"></span>
 <span class="linenos"> 4</span><span class="k">if</span><span class="w"> </span><span class="n">pid</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">{</span><span class="w"></span>

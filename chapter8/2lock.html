@@ -578,15 +578,19 @@
 </span><span class="linenos">15</span><span class="w">        </span><span class="p">};</span><span class="w"></span>
 <span class="linenos">16</span><span class="w">        </span><span class="n">id</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">isize</span><span class="w"></span>
 <span class="linenos">17</span><span class="w">    </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="hll"><span class="linenos">18</span><span class="w">        </span><span class="n">process_inner</span><span class="p">.</span><span class="n">mutex_list</span><span class="p">.</span><span class="n">push</span><span class="p">(</span><span class="nb">Some</span><span class="p">(</span><span class="n">Arc</span>::<span class="n">new</span><span class="p">(</span><span class="n">MutexSpin</span>::<span class="n">new</span><span class="p">())));</span><span class="w"></span>
-</span><span class="linenos">19</span><span class="w">        </span><span class="n">process_inner</span><span class="p">.</span><span class="n">mutex_list</span><span class="p">.</span><span class="n">len</span><span class="p">()</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">isize</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="w"></span>
-<span class="linenos">20</span><span class="w">    </span><span class="p">}</span><span class="w"></span>
-<span class="linenos">21</span><span class="p">}</span><span class="w"></span>
+<span class="hll"><span class="linenos">18</span><span class="w">        </span><span class="n">process_inner</span><span class="p">.</span><span class="n">mutex_list</span><span class="p">.</span><span class="n">push</span><span class="p">(</span><span class="k">if</span><span class="w"> </span><span class="o">!</span><span class="n">blocking</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+</span><span class="linenos">19</span><span class="w">            </span><span class="nb">Some</span><span class="p">(</span><span class="n">Arc</span>::<span class="n">new</span><span class="p">(</span><span class="n">MutexSpin</span>::<span class="n">new</span><span class="p">()))</span><span class="w"></span>
+<span class="linenos">20</span><span class="w">        </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="linenos">21</span><span class="w">            </span><span class="nb">Some</span><span class="p">(</span><span class="n">Arc</span>::<span class="n">new</span><span class="p">(</span><span class="n">MutexBlocking</span>::<span class="n">new</span><span class="p">()))</span><span class="w"></span>
+<span class="linenos">22</span><span class="w">        </span><span class="p">});</span><span class="w"></span>
+<span class="linenos">23</span><span class="w">        </span><span class="n">process_inner</span><span class="p">.</span><span class="n">mutex_list</span><span class="p">.</span><span class="n">len</span><span class="p">()</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">isize</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="w"></span>
+<span class="linenos">24</span><span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="linenos">25</span><span class="p">}</span><span class="w"></span>
 </pre></div>
 </div>
 <ul class="simple">
-<li><p>第 14 行，如果向量中有空的元素，就在这个空元素的位置创建一个可睡眠的互斥锁；</p></li>
-<li><p>第 18 行，如果向量满了，就在向量中添加新的可睡眠的互斥锁；</p></li>
+<li><p>第 14 行，如果向量中有空的元素，就在这个空元素的位置创建互斥锁：当 <code class="docutils literal notranslate"><span class="pre">blocking</span> <span class="pre">=</span> <span class="pre">false</span></code> 时创建自旋锁 <code class="docutils literal notranslate"><span class="pre">MutexSpin</span></code>，当 <code class="docutils literal notranslate"><span class="pre">blocking</span> <span class="pre">=</span> <span class="pre">true</span></code> 时创建可睡眠的互斥锁 <code class="docutils literal notranslate"><span class="pre">MutexBlocking</span></code>；</p></li>
+<li><p>第 18 行，如果向量满了，就在向量末尾添加一个新的互斥锁，同样根据 <code class="docutils literal notranslate"><span class="pre">blocking</span></code> 参数在 <a href="#id7"><span class="problematic" id="id8">``</span></a>MutexSpin``（自旋锁）和 <a href="#id9"><span class="problematic" id="id10">``</span></a>MutexBlocking``（可睡眠互斥锁）之间进行选择。</p></li>
 </ul>
 <p>有了互斥锁，接下来就是实现 <code class="docutils literal notranslate"><span class="pre">Mutex</span></code> trait的内核函数：对应 <code class="docutils literal notranslate"><span class="pre">SYSCALL_MUTEX_LOCK</span></code> 系统调用的
 <code class="docutils literal notranslate"><span class="pre">sys_mutex_lock</span></code> 。操作系统主要工作是，在锁已被其他线程获取的情况下，把当前线程放到等待队列中，

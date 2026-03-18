@@ -356,7 +356,7 @@ Shell: Process 2 exited with code 0
 &gt;&gt;
 </pre></div>
 </div>
-<p>我们可以看到5个代表“哲学家”的线程通过操作系统的 <strong>信号量</strong> 互斥机制在进行 “THINKING”、“EATING”、“WAITING” 的日常生活。
+<p>我们可以看到5个代表“哲学家”的线程通过操作系统的 <strong>互斥锁</strong> 机制在进行 “THINKING”、“EATING”、“WAITING” 的日常生活。
 没有哲学家由于拿不到筷子而饥饿，也没有两个哲学家同时拿到一个筷子。</p>
 <div class="admonition note">
 <p class="admonition-title">注解</p>
@@ -436,22 +436,20 @@ Shell: Process 2 exited with code 0
 <span class="linenos">66</span> │       ├── task
 <span class="linenos">67</span> │       │   ├── context.rs (修改：将任务上下文的成员变量改为 pub 类型)
 <span class="linenos">68</span> │       │   ├── id.rs (新增：由 pid.rs 修改而来，提供 pid/tid 、 kstack/ustack 的分配和回收机制)
-<span class="linenos">69</span> │       │   ├── kthread.rs (新增：完全在内核态运行的线程，仅供参考，在实验中未使用)
-<span class="linenos">70</span> │       │   ├── manager.rs
-<span class="linenos">71</span> │       │   ├── mod.rs (修改：增加阻塞线程的功能，将 exit 扩展到多线程，并在主线程退出时一并退出进程)
-<span class="linenos">72</span> │       │   ├── processor.rs (修改：增加获取当前线程的中断上下文虚拟地址及获取当前进程的功能)
-<span class="linenos">73</span> │       │   ├── process.rs (新增：将原先 Task 中的地址空间、文件等机制拆分为进程)
-<span class="linenos">74</span> │       │   ├── stackless_coroutine.rs (新增：完全在内核态运行的无栈协程，仅供参考，在实验中未使用)
-<span class="linenos">75</span> │       │   ├── switch.rs
-<span class="linenos">76</span> │       │   ├── switch.S
-<span class="linenos">77</span> │       │   └── task.rs (修改：将进程相关的功能移至 process.rs 中)
-<span class="linenos">78</span> │       ├── timer.rs (修改：增加定时器条件变量的实现)
-<span class="linenos">79</span> │       └── trap
-<span class="linenos">80</span> │           ├── context.rs
-<span class="linenos">81</span> │           ├── mod.rs (修改：使用线程对应的中断上下文地址而非固定的 TRAP_CONTEXT)
-<span class="linenos">82</span> │           └── trap.S
-<span class="linenos">83</span> ├── README.md
-<span class="linenos">84</span> └── rust-toolchain
+<span class="linenos">69</span> │       │   ├── manager.rs
+<span class="linenos">70</span> │       │   ├── mod.rs (修改：增加阻塞线程的功能，将 exit 扩展到多线程，并在主线程退出时一并退出进程)
+<span class="linenos">71</span> │       │   ├── processor.rs (修改：增加获取当前线程的中断上下文虚拟地址及获取当前进程的功能)
+<span class="linenos">72</span> │       │   ├── process.rs (新增：将原先 Task 中的地址空间、文件等机制拆分为进程)
+<span class="linenos">73</span> │       │   ├── switch.rs
+<span class="linenos">74</span> │       │   ├── switch.S
+<span class="linenos">75</span> │       │   └── task.rs (修改：将进程相关的功能移至 process.rs 中)
+<span class="linenos">76</span> │       ├── timer.rs (修改：增加定时器条件变量的实现)
+<span class="linenos">77</span> │       └── trap
+<span class="linenos">78</span> │           ├── context.rs
+<span class="linenos">79</span> │           ├── mod.rs (修改：使用线程对应的中断上下文地址而非固定的 TRAP_CONTEXT)
+<span class="linenos">80</span> │           └── trap.S
+<span class="linenos">81</span> ├── README.md
+<span class="linenos">82</span> └── rust-toolchain
 </pre></div>
 </div>
 </div>
