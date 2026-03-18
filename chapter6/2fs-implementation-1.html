@@ -392,22 +392,28 @@
 <span class="p">}</span><span class="w"></span>
 </pre></div>
 </div>
-<p>它们的含义是：在 <code class="docutils literal notranslate"><span class="pre">BlockCache</span></code> 缓冲区偏移量为 <code class="docutils literal notranslate"><span class="pre">offset</span></code> 的位置，获取一个类型为 <code class="docutils literal notranslate"><span class="pre">T</span></code> 不可变/可变引用，将闭包 <code class="docutils literal notranslate"><span class="pre">f</span></code> 作用于这个引用，返回 <code class="docutils literal notranslate"><span class="pre">f</span></code> 的返回值。  中所定义的操作。</p>
+<p>它们的含义是：在 <code class="docutils literal notranslate"><span class="pre">BlockCache</span></code> 缓冲区偏移量为 <code class="docutils literal notranslate"><span class="pre">offset</span></code> 的位置，获取一个类型为 <code class="docutils literal notranslate"><span class="pre">T</span></code> 不可变/可变引用，将闭包 <code class="docutils literal notranslate"><span class="pre">f</span></code> 作用于这个引用，然后返回闭包 <code class="docutils literal notranslate"><span class="pre">f</span></code> 的返回值。</p>
 <p>这里我们传入闭包的类型为 <code class="docutils literal notranslate"><span class="pre">FnOnce</span></code> ，这是因为闭包里面的变量被捕获的方式涵盖了不可变引用/可变引用/和 move 三种可能性，故而我们需要选取范围最广的 <code class="docutils literal notranslate"><span class="pre">FnOnce</span></code> 。参数中的 <code class="docutils literal notranslate"><span class="pre">impl</span></code> 关键字体现了一种类似泛型的静态分发功能。</p>
 <div class="admonition warning">
 <p class="admonition-title">警告</p>
 <p><strong>Rust 语法卡片：闭包</strong></p>
 <p>闭包是持有外部环境变量的函数。所谓外部环境, 就是指创建闭包时所在的词法作用域。Rust中定义的闭包，按照对外部环境变量的使用方式（借用、复制、转移所有权），分为三个类型: Fn、FnMut、FnOnce。Fn类型的闭包会在闭包内部以共享借用的方式使用环境变量；FnMut类型的闭包会在闭包内部以独占借用的方式使用环境变量；而FnOnce类型的闭包会在闭包内部以所有者的身份使用环境变量。由此可见，根据闭包内使用环境变量的方式，即可判断创建出来的闭包的类型。</p>
 </div>
-<p>当 <code class="docutils literal notranslate"><span class="pre">BlockCache</span></code> 的生命周期结束后，缓冲区也会被回收， <code class="docutils literal notranslate"><span class="pre">modified</span></code> 标记将会决定数据是否需要写回磁盘：</p>
+<p>当 <code class="docutils literal notranslate"><span class="pre">BlockCache</span></code> 的生命周期结束后，缓冲区也会被回收， <code class="docutils literal notranslate"><span class="pre">modified</span></code> 标记将会决定数据是否需要写回磁盘。这里将写回逻辑抽取为 <code class="docutils literal notranslate"><span class="pre">sync</span></code> 方法，方便后续的全局同步操作调用：</p>
 <div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="c1">// easy-fs/src/block_cache.rs</span>
 
-<span class="k">impl</span><span class="w"> </span><span class="nb">Drop</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">BlockCache</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="k">fn</span> <span class="nf">drop</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="k">impl</span><span class="w"> </span><span class="n">BlockCache</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span> <span class="nf">sync</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
 <span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">modified</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
 <span class="w">            </span><span class="bp">self</span><span class="p">.</span><span class="n">modified</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span><span class="p">;</span><span class="w"></span>
 <span class="w">            </span><span class="bp">self</span><span class="p">.</span><span class="n">block_device</span><span class="p">.</span><span class="n">write_block</span><span class="p">(</span><span class="bp">self</span><span class="p">.</span><span class="n">block_id</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="bp">self</span><span class="p">.</span><span class="n">cache</span><span class="p">);</span><span class="w"></span>
 <span class="w">        </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="k">impl</span><span class="w"> </span><span class="nb">Drop</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">BlockCache</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">fn</span> <span class="nf">drop</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="bp">self</span><span class="p">.</span><span class="n">sync</span><span class="p">()</span><span class="w"></span>
 <span class="w">    </span><span class="p">}</span><span class="w"></span>
 <span class="p">}</span><span class="w"></span>
 </pre></div>
@@ -465,7 +471,7 @@
 </div>
 <ul class="simple">
 <li><p>第 9 行，遍历整个队列试图找到一个编号相同的块缓存，如果找到，将块缓存管理器中保存的块缓存的引用复制一份并返回；</p></li>
-<li><p>第 13 行对应找不到的情况，此时必须将块从磁盘读入内存中的缓冲区。读取前需要判断已保存的块数量是否达到了上限。是，则执行缓存替换算法，替换的标准是其强引用计数 <span class="math notranslate nohighlight">\(\eq 1\)</span> ，即除了块缓存管理器保留的一份副本之外，在外面没有副本正在使用。</p></li>
+<li><p>第 13 行对应找不到的情况，此时必须将块从磁盘读入内存中的缓冲区。读取前需要判断已保存的块数量是否达到了上限。是，则执行缓存替换算法，替换的标准是其强引用计数为 1 ，即除了块缓存管理器保留的一份副本之外，在外面没有副本正在使用。</p></li>
 <li><p>第 27 行开始，创建一个新的块缓存（会触发 <code class="docutils literal notranslate"><span class="pre">read_block</span></code> 进行块读取）并加入到队尾，最后返回给请求者。</p></li>
 </ul>
 </div>
@@ -817,20 +823,20 @@
 <span class="cp">#[repr(C)]</span><span class="w"></span>
 <span class="k">pub</span><span class="w"> </span><span class="k">struct</span> <span class="nc">DirEntry</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
 <span class="w">    </span><span class="n">name</span>: <span class="p">[</span><span class="kt">u8</span><span class="p">;</span><span class="w"> </span><span class="n">NAME_LENGTH_LIMIT</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">],</span><span class="w"></span>
-<span class="w">    </span><span class="n">inode_number</span>: <span class="kt">u32</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="n">inode_id</span>: <span class="kt">u32</span><span class="p">,</span><span class="w"></span>
 <span class="p">}</span><span class="w"></span>
 
 <span class="k">pub</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">DIRENT_SZ</span>: <span class="kt">usize</span> <span class="o">=</span><span class="w"> </span><span class="mi">32</span><span class="p">;</span><span class="w"></span>
 </pre></div>
 </div>
-<p>目录项 <code class="docutils literal notranslate"><span class="pre">Dirent</span></code> 保存的文件名长度不能超过 27。目录项自身长 32 字节，每个数据块可以存储 16 个目录项。可以通过 <code class="docutils literal notranslate"><span class="pre">empty</span></code> 和 <code class="docutils literal notranslate"><span class="pre">new</span></code> 方法生成目录项，通过 <code class="docutils literal notranslate"><span class="pre">name</span></code> 和 <code class="docutils literal notranslate"><span class="pre">inode_number</span></code> 方法取出目录项中的内容：</p>
+<p>目录项 <code class="docutils literal notranslate"><span class="pre">Dirent</span></code> 保存的文件名长度不能超过 27。目录项自身长 32 字节，每个数据块可以存储 16 个目录项。可以通过 <code class="docutils literal notranslate"><span class="pre">empty</span></code> 和 <code class="docutils literal notranslate"><span class="pre">new</span></code> 方法生成目录项，通过 <code class="docutils literal notranslate"><span class="pre">name</span></code> 和 <code class="docutils literal notranslate"><span class="pre">inode_id</span></code> 方法取出目录项中的内容：</p>
 <div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="c1">// easy-fs/src/layout.rs</span>
 
 <span class="k">impl</span><span class="w"> </span><span class="n">DirEntry</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
 <span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span> <span class="nf">empty</span><span class="p">()</span><span class="w"> </span>-&gt; <span class="nc">Self</span><span class="p">;</span><span class="w"></span>
-<span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span> <span class="nf">new</span><span class="p">(</span><span class="n">name</span>: <span class="kp">&amp;</span><span class="kt">str</span><span class="p">,</span><span class="w"> </span><span class="n">inode_number</span>: <span class="kt">u32</span><span class="p">)</span><span class="w"> </span>-&gt; <span class="nc">Self</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span> <span class="nf">new</span><span class="p">(</span><span class="n">name</span>: <span class="kp">&amp;</span><span class="kt">str</span><span class="p">,</span><span class="w"> </span><span class="n">inode_id</span>: <span class="kt">u32</span><span class="p">)</span><span class="w"> </span>-&gt; <span class="nc">Self</span><span class="p">;</span><span class="w"></span>
 <span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span> <span class="nf">name</span><span class="p">(</span><span class="o">&amp;</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span>-&gt; <span class="kp">&amp;</span><span class="kt">str</span><span class="p">;</span><span class="w"></span>
-<span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span> <span class="nf">inode_number</span><span class="p">(</span><span class="o">&amp;</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span>-&gt; <span class="kt">u32</span>
+<span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span> <span class="nf">inode_id</span><span class="p">(</span><span class="o">&amp;</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span>-&gt; <span class="kt">u32</span>
 <span class="p">}</span><span class="w"></span>
 </pre></div>
 </div>

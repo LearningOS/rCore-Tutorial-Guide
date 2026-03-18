@@ -205,11 +205,14 @@
     pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
         let token = current_user_token();
         let task = current_task().unwrap();
-        let inner = task.acquire_inner_lock();
+        let inner = task.inner_exclusive_access();
         if fd >= inner.fd_table.len() {
             return -1;
         }
         if let Some(file) = &inner.fd_table[fd] {
+            if !file.writable() {
+                return -1;
+            }
             let file = file.clone();
             // release Task lock manually to avoid deadlock
             drop(inner);
@@ -224,12 +227,15 @@
     pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
         let token = current_user_token();
         let task = current_task().unwrap();
-        let inner = task.acquire_inner_lock();
+        let inner = task.inner_exclusive_access();
         if fd >= inner.fd_table.len() {
             return -1;
         }
         if let Some(file) = &inner.fd_table[fd] {
             let file = file.clone();
+            if !file.readable() {
+                return -1;
+            }
             // release Task lock manually to avoid deadlock
             drop(inner);
             file.read(

@@ -89,6 +89,7 @@
             .modify(root_inode_offset, |disk_inode: &mut DiskInode| {
                 disk_inode.initialize(DiskInodeType::Directory);
             });
+            block_cache_sync_all();
             Arc::new(Mutex::new(efs))
         }
     }
@@ -324,7 +325,7 @@ inode 和数据块的分配/回收也由它负责：
                     DIRENT_SZ,
                 );
                 if dirent.name() == name {
-                    return Some(dirent.inode_number() as u32);
+                    return Some(dirent.inode_id() as u32);
                 }
             }
             None
@@ -380,12 +381,13 @@ inode 和数据块的分配/回收也由它负责：
     impl Inode {
         pub fn create(&self, name: &str) -> Option<Arc<Inode>> {
             let mut fs = self.fs.lock();
-            if self.modify_disk_inode(|root_inode| {
+            let op = |root_inode: &DiskInode| {
                 // assert it is a directory
                 assert!(root_inode.is_dir());
                 // has the file been created?
                 self.find_inode_id(name, root_inode)
-            }).is_some() {
+            };
+            if self.read_disk_inode(op).is_some() {
                 return None;
             }
             // create a new file
@@ -416,6 +418,7 @@ inode 和数据块的分配/回收也由它负责：
             });
 
             let (block_id, block_offset) = fs.get_disk_inode_pos(new_inode_id);
+            block_cache_sync_all();
             // return inode
             Some(Arc::new(Self::new(
                 block_id,
@@ -427,9 +430,9 @@ inode 和数据块的分配/回收也由它负责：
         }
     }
 
-- 第 6~13 行，检查文件是否已经在根目录下，如果找到的话返回 ``None`` ；
-- 第 14~25 行，为待创建文件分配一个新的 inode 并进行初始化；
-- 第 26~39 行，将待创建文件的目录项插入到根目录的内容中使得之后可以索引过来。
+- 第 6~14 行，检查文件是否已经在根目录下，如果找到的话返回 ``None`` ；
+- 第 15~26 行，为待创建文件分配一个新的 inode 并进行初始化；
+- 第 27~40 行，将待创建文件的目录项插入到根目录的内容中使得之后可以索引过来。
 
 文件清空
 +++++++++++++++++++++++++++++++++++++++
@@ -451,6 +454,7 @@ inode 和数据块的分配/回收也由它负责：
                     fs.dealloc_data(data_block);
                 }
             });
+            block_cache_sync_all();
         }
     }
 
@@ -475,10 +479,12 @@ inode 和数据块的分配/回收也由它负责：
 
         pub fn write_at(&self, offset: usize, buf: &[u8]) -> usize {
             let mut fs = self.fs.lock();
-            self.modify_disk_inode(|disk_inode| {
+            let size = self.modify_disk_inode(|disk_inode| {
                 self.increase_size((offset + buf.len()) as u32, disk_inode, &mut fs);
                 disk_inode.write_at(offset, buf, &self.block_device)
-            })
+            });
+            block_cache_sync_all();
+            size
         }
     }
 
@@ -547,15 +553,11 @@ inode 和数据块的分配/回收也由它负责：
                 .write(true)
                 .create(true)
                 .open(format!("{}{}", target_path, "fs.img"))?;
-            f.set_len(8192 * 512).unwrap();
+            f.set_len(16 * 2048 * 512).unwrap();
             f
         })));
-        // 4MiB, at most 4095 files
-        let efs = EasyFileSystem::create(
-            block_file.clone(),
-            8192,
-            1,
-        );
+        // 16MiB, at most 4095 files
+        let efs = EasyFileSystem::create(block_file, 16 * 2048, 1);
         let root_inode = Arc::new(EasyFileSystem::root_inode(&efs));
         let apps: Vec<_> = read_dir(src_path)
             .unwrap()
@@ -584,8 +586,8 @@ inode 和数据块的分配/回收也由它负责：
     }
 
 - 为了实现 ``easy-fs-fuse`` 和 ``os/user`` 的解耦，第 6~21 行使用 ``clap`` crate 进行命令行参数解析，需要通过 ``-s`` 和 ``-t`` 分别指定应用的源代码目录和保存应用 ELF 的目录而不是在 ``easy-fs-fuse`` 中硬编码。如果解析成功的话它们会分别被保存在变量 ``src_path`` 和 ``target_path`` 中。
-- 第 23~38 行依次完成：创建 4MiB 的 easy-fs 镜像文件、进行 easy-fs 初始化、获取根目录 inode 。
-- 第 39 行获取源码目录中的每个应用的源代码文件并去掉后缀名，收集到向量 ``apps`` 中。
-- 第 48 行开始，枚举 ``apps`` 中的每个应用，从放置应用执行程序的目录中找到对应应用的 ELF 文件（这是一个 HostOS 上的文件）并将数据读入内存。接着需要在我们的 easy-fs 中创建一个同名文件并将 ELF 数据写入到这个文件中。这个过程相当于将 HostOS 上的文件系统中的一个文件复制到我们的 easy-fs 中。
+- 第 23~34 行依次完成：创建 16MiB 的 easy-fs 镜像文件、进行 easy-fs 初始化、获取根目录 inode 。
+- 第 35 行获取源码目录中的每个应用的源代码文件并去掉后缀名，收集到向量 ``apps`` 中。
+- 第 44 行开始，枚举 ``apps`` 中的每个应用，从放置应用执行程序的目录中找到对应应用的 ELF 文件（这是一个 HostOS 上的文件）并将数据读入内存。接着需要在我们的 easy-fs 中创建一个同名文件并将 ELF 数据写入到这个文件中。这个过程相当于将 HostOS 上的文件系统中的一个文件复制到我们的 easy-fs 中。
 
 ``easy-fs-fuse`` 不用担心块缓存中的修改没有写回磁盘，因为在 ``easy-fs`` 操作过程中实现了 ``block_cache_sync_all`` 函数用以写回每次操作的结果。
